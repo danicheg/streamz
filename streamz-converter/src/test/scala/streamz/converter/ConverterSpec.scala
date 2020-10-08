@@ -18,7 +18,6 @@ package streamz.converter
 
 import akka.Done
 import akka.actor.ActorSystem
-import akka.stream.Materializer
 import akka.stream.scaladsl.{ Flow => AkkaFlow, Sink => AkkaSink, Source => AkkaSource, _ }
 import akka.testkit._
 import cats.effect.IO
@@ -42,13 +41,11 @@ object ConverterSpec {
 
 class ConverterSpec extends TestKit(ActorSystem("test")) with AnyWordSpecLike with Matchers with BeforeAndAfterAll {
   import ConverterSpec._
+  import cats.effect.unsafe.implicits.global
 
-  private implicit val materializer = Materializer.createMaterializer(system)
   private implicit val dispatcher = system.dispatcher
-  private implicit val contextShift = IO.contextShift(scala.concurrent.ExecutionContext.global)
 
   override def afterAll(): Unit = {
-    materializer.shutdown()
     TestKit.shutdownActorSystem(system)
     super.afterAll()
   }
@@ -235,7 +232,7 @@ class ConverterSpec extends TestKit(ActorSystem("test")) with AnyWordSpecLike wi
 
     def seqSink(probe: TestProbe): Pipe[IO, Int, Unit] =
       s => s.fold(Seq.empty[Int])(_ :+ _).map(probe.ref ! Success(_))
-        .handleErrorWith(err => Stream.eval_(IO(probe.ref ! Failure(err))) ++ Stream.raiseError[IO](err))
+        .handleErrorWith(err => Stream.exec(IO(probe.ref ! Failure(err))) ++ Stream.raiseError[IO](err))
         .onFinalize(IO(probe.ref ! Success(Done)))
 
     "propagate elements and completion from AS sink to FS2 sink" in {
